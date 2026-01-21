@@ -28,8 +28,9 @@ const (
 
 // Input is the input for GatewayAPI.
 type Input struct {
-	GatewayClass       gatewayv1.GatewayClass
-	GatewayClassConfig *v2alpha1.CiliumGatewayClassConfig
+	GatewayClass               gatewayv1.GatewayClass
+	GatewayClassConfig         *v2alpha1.CiliumGatewayClassConfig
+	ServerHeaderTransformation model.ServerHeaderTransformation
 
 	Gateway         gatewayv1.Gateway
 	HTTPRoutes      []gatewayv1.HTTPRoute
