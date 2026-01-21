@@ -45,6 +45,28 @@ Once the Gateway is deployed, you can access the service using via NodePort serv
     root@kind-worker:/# curl http://localhost:30493/details/1
     {"id":1,"author":"William Shakespeare","year":1595,"type":"paperback","pages":200,"publisher":"PublisherA","language":"English","ISBN-10":"1234567890","ISBN-13":"123-1234567890"}root@kind-worker:/#
 
+Server header transformations
+=============================
+
+Cilium Gateway API allows for controlling server response headers. Using Envoy's ``ServerHeaderTransformation``, header server manipulations can be:
+
+* ``OVERWRITE`` (default)
+* ``APPEND_IF_ABSENT``
+* ``PASS_THROUGH``
+
+Here is an example ``CiliumGatewayClassConfig`` with ``ServerHeaderTransformation`` set to ``PASS_THROUGH``:
+
+.. code-block:: yaml
+
+    apiVersion: cilium.io/v2alpha1
+    kind: CiliumGatewayClassConfig
+    metadata:
+      name: test-gateway-config
+      namespace: default
+    spec:
+      envoy:
+        serverHeaderTransformation: PASS_THROUGH
+
 Reference
 =========
 

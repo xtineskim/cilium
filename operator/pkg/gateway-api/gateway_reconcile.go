@@ -31,6 +31,7 @@ import (
 	controllerruntime "github.com/cilium/cilium/operator/pkg/controller-runtime"
 	"github.com/cilium/cilium/operator/pkg/gateway-api/helpers"
 	"github.com/cilium/cilium/operator/pkg/gateway-api/routechecks"
+	"github.com/cilium/cilium/operator/pkg/model"
 	"github.com/cilium/cilium/operator/pkg/model/ingestion"
 	"github.com/cilium/cilium/pkg/annotation"
 	ciliumv2 "github.com/cilium/cilium/pkg/k8s/apis/cilium.io/v2"
@@ -160,16 +161,22 @@ func (r *gatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	tlsRoutes := r.filterTLSRoutesByGateway(ctx, gw, tlsRouteList.Items)
 	grpcRoutes := r.filterGRPCRoutesByGateway(ctx, gw, grpcRouteList.Items)
 
+	gatewayClassConfig := r.getGatewayClassConfig(ctx, gwc)
+	var serverHeaderTransformation model.ServerHeaderTransformation
+	if gatewayClassConfig != nil && gatewayClassConfig.Spec.Envoy != nil && gatewayClassConfig.Spec.Envoy.ServerHeaderTransformation != nil {
+		serverHeaderTransformation = model.ServerHeaderTransformation(*gatewayClassConfig.Spec.Envoy.ServerHeaderTransformation)
+	}
 	m := ingestion.GatewayAPI(ingestion.Input{
-		GatewayClass:       *gwc,
-		GatewayClassConfig: r.getGatewayClassConfig(ctx, gwc),
-		Gateway:            *gw,
-		HTTPRoutes:         httpRoutes,
-		TLSRoutes:          tlsRoutes,
-		GRPCRoutes:         grpcRoutes,
-		Services:           servicesList.Items,
-		ServiceImports:     serviceImportsList.Items,
-		ReferenceGrants:    grants.Items,
+		GatewayClass:               *gwc,
+		GatewayClassConfig:         gatewayClassConfig,
+		ServerHeaderTransformation: serverHeaderTransformation,
+		Gateway:                    *gw,
+		HTTPRoutes:                 httpRoutes,
+		TLSRoutes:                  tlsRoutes,
+		GRPCRoutes:                 grpcRoutes,
+		Services:                   servicesList.Items,
+		ServiceImports:             serviceImportsList.Items,
+		ReferenceGrants:            grants.Items,
 	})
 
 	validListener, err := r.setListenerStatus(ctx, gw, httpRouteList, tlsRouteList, grpcRouteList)
