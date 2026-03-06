@@ -224,7 +224,7 @@ jobs:
           # Install Gateway CRDs
           GW_VERSION ?= $(shell grep "sigs.k8s.io/gateway-api" go.mod | awk '{print $$2}' | awk -F'-' '{print (NF>2)?$$NF:$$0}')
           # Set this to "standard" to use the standard CRDs instead
-          GW_CHANNEL ?= experimental
+          GW_CHANNEL ?= "experimental"
 
           GW_CHANNEL="$GW_CHANNEL"\
           GW_VERSION="$GW_VERSION"\
