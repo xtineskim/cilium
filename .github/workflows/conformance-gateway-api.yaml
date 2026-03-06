@@ -230,7 +230,7 @@ jobs:
           GW_VERSION="$GW_VERSION"\
           make kind-servicemesh-prereqs
 
-          # To make sure that Gateway API CRs are available
+          # To make sure that Gateway API CRDs are available
           kubectl wait --for condition=Established crd/gatewayclasses.gateway.networking.k8s.io --timeout=${{ env.timeout }}
           kubectl wait --for condition=Established crd/gateways.gateway.networking.k8s.io --timeout=${{ env.timeout }}
           kubectl wait --for condition=Established crd/httproutes.gateway.networking.k8s.io --timeout=${{ env.timeout }}
