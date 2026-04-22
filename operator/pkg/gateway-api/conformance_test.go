@@ -74,7 +74,7 @@ func TestConformance(t *testing.T) {
 	}
 	// TODO: Run MeshGRPCRouteWeight once it is deflaked upstream. See
 	//       GH-42456 for details.
-	skipTests = append(skipTests, "MeshGRPCRouteWeight")
+	//skipTests = append(skipTests, "MeshGRPCRouteWeight")
 	//skipTests = append(skipTests, "MeshHTTPRouteMatching")  // same here
 	//skipTests = append(skipTests, "MeshHTTPRouteNamedRule") // same here
 	options.TimeoutConfig.DefaultPollInterval = 3 * time.Second
