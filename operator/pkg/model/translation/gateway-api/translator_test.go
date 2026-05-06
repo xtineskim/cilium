@@ -169,6 +169,10 @@ func Test_translator_Translate_HostNetwork(t *testing.T) {
 						IPv4Enabled: tt.ipv4Enabled,
 						IPv6Enabled: tt.ipv6Enabled,
 					},
+					OriginalIPDetectionConfig: translation.OriginalIPDetectionConfig{
+						UseRemoteAddress:  true,
+						XFFNumTrustedHops: 0,
+					},
 				},
 			},
 			{
@@ -194,6 +198,10 @@ func Test_translator_Translate_HostNetwork(t *testing.T) {
 					IPConfig: translation.IPConfig{
 						IPv4Enabled: tt.ipv4Enabled,
 						IPv6Enabled: tt.ipv6Enabled,
+					},
+					OriginalIPDetectionConfig: translation.OriginalIPDetectionConfig{
+						UseRemoteAddress:  true,
+						XFFNumTrustedHops: 0,
 					},
 				},
 			},
@@ -243,6 +251,7 @@ func Test_translator_Translate_WithXffNumTrustedHops(t *testing.T) {
 					Enabled: true,
 				},
 				OriginalIPDetectionConfig: translation.OriginalIPDetectionConfig{
+					UseRemoteAddress:  true,
 					XFFNumTrustedHops: 2,
 				},
 				ListenerConfig: translation.ListenerConfig{
