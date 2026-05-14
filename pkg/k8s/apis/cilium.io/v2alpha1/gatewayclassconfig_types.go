@@ -150,6 +150,20 @@ type EnvoyConfig struct {
 	// +kubebuilder:validation:Optional
 	ServerHeaderTransformation *ServerHeaderTransformationType `json:"serverHeaderTransformation,omitempty"`
 }
+type GRPCWebTranslationConfig struct {
+	// Enabled controls Envoy's gRPC-web to gRPC request translation.
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:default=true
+	Enabled *bool `json:"enabled,omitempty"`
+}
+
+type HTTPOptions struct {
+	// GRPCWebTranslation controls Envoy's gRPC-web to gRPC request translation.
+	//
+	// +kubebuilder:validation:Optional
+	GRPCWebTranslation *GRPCWebTranslationConfig `json:"grpcWebTranslation,omitempty"`
+}
 
 // CiliumGatewayClassConfigSpec specifies all the configuration options for a
 // Cilium managed GatewayClass.
@@ -171,6 +185,10 @@ type CiliumGatewayClassConfigSpec struct {
 	//
 	// +kubebuilder:validation:Optional
 	Envoy *EnvoyConfig `json:"envoy,omitempty"`
+	// HTTPOptions specifies HTTP connection manager options.
+	//
+	// +kubebuilder:validation:Optional
+	HTTPOptions *HTTPOptions `json:"httpOptions,omitempty"`
 }
 
 // +deepequal-gen=false
@@ -184,4 +202,14 @@ type CiliumGatewayClassConfigStatus struct {
 	// +listType=map
 	// +listMapKey=type
 	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
+}
+
+// GRPCWebTranslationEnabled returns true if gRPC-web to gRPC request translation should be enabled.
+// Translation is always enabled unless explicitly disabled.
+func (c *CiliumGatewayClassConfig) GRPCWebTranslationEnabled() bool {
+	return c == nil ||
+		c.Spec.HTTPOptions == nil ||
+		c.Spec.HTTPOptions.GRPCWebTranslation == nil ||
+		c.Spec.HTTPOptions.GRPCWebTranslation.Enabled == nil ||
+		*c.Spec.HTTPOptions.GRPCWebTranslation.Enabled
 }
