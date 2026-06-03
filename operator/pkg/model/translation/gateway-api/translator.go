@@ -194,7 +194,7 @@ func (t *gatewayAPITranslator) toServicePorts(ports []uint32) []corev1.ServicePo
 // If hostNetwork is enabled, it returns ServiceTypeClusterIP. The default value is ServiceTypeLoadBalancer.
 func (t *gatewayAPITranslator) toServiceType(params *model.Service) corev1.ServiceType {
 	if t.cfg.HostNetworkConfig.Enabled {
-		return corev1.ServiceTypeClusterIP
+		return corev1.ServiceTypeNodePort
 	}
 	if params == nil {
 		return corev1.ServiceTypeLoadBalancer
