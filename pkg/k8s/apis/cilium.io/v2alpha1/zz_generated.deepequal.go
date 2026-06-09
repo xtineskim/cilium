@@ -1475,6 +1475,12 @@ func (in *IPPoolSpec) DeepEqual(other *IPPoolSpec) bool {
 		}
 	}
 
+	if in.AllowFirstIP != other.AllowFirstIP {
+		return false
+	}
+	if in.AllowLastIP != other.AllowLastIP {
+		return false
+	}
 	if (in.PodSelector == nil) != (other.PodSelector == nil) {
 		return false
 	} else if in.PodSelector != nil {
