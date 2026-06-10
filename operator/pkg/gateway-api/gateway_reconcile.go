@@ -797,6 +797,9 @@ func (r *gatewayReconciler) setAddressStatus(ctx context.Context, gw *gatewayv1.
 		}
 
 		for _, node := range nodes.Items {
+			if len(node.Status.Addresses) == 0 {
+				continue
+			}
 			nodeAddress := node.Status.Addresses[0]
 			addresses = append(addresses, gatewayv1.GatewayStatusAddress{
 				Type:  GatewayAddressTypePtr(gatewayv1.IPAddressType),
