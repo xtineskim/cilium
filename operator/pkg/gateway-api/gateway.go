@@ -15,6 +15,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
+	gateway_inf_ext "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	mcsapiv1beta1 "sigs.k8s.io/mcs-api/pkg/apis/v1beta1"
 
 	"github.com/cilium/cilium/operator/pkg/gateway-api/helpers"
@@ -53,6 +54,7 @@ type gatewayReconciler struct {
 	tcpUDPUnsupportedReason       string
 	hostNetworkEnabled            bool
 	hostNetworkLabel              metav1.LabelSelector
+	gatewayAPIInferenceExtEnabled bool
 }
 
 func newGatewayReconciler(mgr ctrl.Manager, translator translation.Translator, logger *slog.Logger, controllerName string, hostNetworkEnabled bool, hostNetworkLabel metav1.LabelSelector) *gatewayReconciler {
@@ -98,6 +100,7 @@ func newGatewayReconciler(mgr ctrl.Manager, translator translation.Translator, l
 		tcpUDPUnsupportedReason:       hostNetworkTCPUDPRouteUnsupportedReason,
 		hostNetworkEnabled:            hostNetworkEnabled,
 		hostNetworkLabel:              hostNetworkLabel,
+		gatewayAPIInferenceExtEnabled gatewayAPIInferenceExtEnabled,
 	}
 }
 
@@ -172,5 +175,9 @@ func (r *gatewayReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		gatewayBuilder = gatewayBuilder.Watches(&mcsapiv1beta1.ServiceImport{}, watchhandlers.EnqueueRequestForBackendServiceImport(r.client, *r.logger, r.controllerName))
 	}
 
+	if gatewayAPIInferenceExtEnabled {
+		// Watch for changes to InferencePool and InferenceObjective
+		gatewayBuilder = gatewayBuilder.Watches(&InferencePool{}).Watches(&gateway_inf_ext.InferencePool{})
+	}
 	return gatewayBuilder.Complete(r)
 }
