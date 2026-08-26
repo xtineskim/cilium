@@ -20,27 +20,36 @@ import (
 // for all Cilium-relevant Gateways associated with that InferencePool.
 func EnqueueRequestForOwningInferencePool(c client.Client, logger *slog.Logger, controllerName string) handler.EventHandler {
 	return handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, a client.Object) []reconcile.Request {
-		// get all the httproutes that the inferencepool refers to
+		// get all the httproutes that refers to the inferencepool
 		inferencePool, ok := a.(*gateway_inf_ext.InferencePool)
-		httpRouteList := &gatewayv1.HTTPRoute{}
+		if !ok {
+			return nil
+		}
+		httpRouteList := &gatewayv1.HTTPRouteList{}
 
 		if err := c.List(ctx, httpRouteList); err != nil {
-			scopedLog.WarnContext(ctx, "Unable to list httproutes", logfields.Error, err)
+			logger.WarnContext(ctx, "Unable to list httproutes", logfields.Error, err)
 		}
 
-		httprouteInfExt:= make(map[&gatewayv1.HTTPRoute]struct{})
+		httprouteInfExt := make(map[*gatewayv1.HTTPRoute]struct{})
 
 		// for each httproute, check if the rules.backendref is the inferencepool
-		for hr := range httpRouteList {
+		for _, hr := range httpRouteList.Items {
 			for _, backend := range hr.Spec.Rules {
-				if backend.kind == "InferencePool" && backend.name == inferencePool.Metadata.Name {
+				if backend.Name == (*gatewayv1.SectionName)(&inferencePool.Name) {
 					// if it is a match, then put the httproute in a list
-					httprouteInfExt[hr] = struct{}{}
-				}else{
+					httprouteInfExt[&hr] = struct{}{}
+				} else {
 					continue
 				}
 			}
 		}
+		recReq := []reconcile.Request{}
 		// get all the gateways associated with the httproutes
+		for r, _ := range httprouteInfExt {
+			req := getGatewayReconcileRequestsForRoute(context.Background(), c, a, r.Spec.CommonRouteSpec, logger, controllerName)
+			recReq = append(recReq, req...)
+		}
+		return recReq
 	})
 }
