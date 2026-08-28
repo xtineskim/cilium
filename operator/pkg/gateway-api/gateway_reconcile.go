@@ -21,6 +21,7 @@ import (
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	controllerruntime "github.com/cilium/cilium/operator/pkg/controller-runtime"
+	"github.com/cilium/cilium/operator/pkg/gateway-api/helpers"
 	"github.com/cilium/cilium/operator/pkg/model/ingestion"
 	gatewayApiTranslation "github.com/cilium/cilium/operator/pkg/model/translation/gateway-api"
 	ciliumv2 "github.com/cilium/cilium/pkg/k8s/apis/cilium.io/v2"
@@ -168,6 +169,20 @@ func (r *gatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		setGatewayAccepted(gw, true, "Gateway successfully scheduled", gatewayv1.GatewayReasonAccepted)
 	}
 
+	// if there are inferencepools, create the shadow service for them
+	if r.gatewayAPIInferenceExtensionEnabled && len(inputs.InferencePools) > 0 {
+		for _, infPool := range inputs.InferencePools{
+			// get the shadow service for that inference pool
+			infPoolSvc := helpers.DesiredShadowService(&infPool)
+
+			if err := r.ensureService(ctx, infPoolSvc); err != nil{
+				// update the inference pool status
+				return r.handleReconcileErrorWithStatus(ctx, fmt.Errorf("failed to create the inference pool Service resource: %w", err), original, gw)
+			}
+
+		}
+	}
+
 	// Step 3: Ingest loaded and validated resources into internal model
 	m := ingestion.GatewayAPI(scopedLog, ingestion.Input{
 		GatewayClass:        *gwc,
@@ -183,6 +198,7 @@ func (r *gatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		ReferenceGrants:     inputs.ReferenceGrants,
 		BackendTLSPolicyMap: btlspStatusMap,
 		MergedListeners:     listenerStatusResult.MergedAndValidListeners,
+		InferencePools: 	 inputs.InferencePools,
 	})
 
 	// Step 4: Translate the listeners into Cilium model
