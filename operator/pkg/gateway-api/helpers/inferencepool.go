@@ -13,7 +13,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/ptr"
 	gateway_inf_ext "sigs.k8s.io/gateway-api-inference-extension/api/v1"
-	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
 const (
@@ -25,14 +24,14 @@ func HasInferencePoolSupport(scheme *runtime.Scheme) bool {
 	return scheme.Recognizes(GatewayIEV1GVK("InferencePool"))
 }
 
-func ShadowServiceName(name gatewayv1.ObjectName)string{
+func ShadowServiceName(name string)string{
 
 	return string(name)+ShadowServicePostfix
 }
 
 // DesiredShadowService returns the Service object for a given InferencePool
 func DesiredShadowService(infPool *gateway_inf_ext.InferencePool) *corev1.Service{
-	name := infPool.Name + ShadowServicePostfix
+	name := ShadowServiceName(infPool.Name)
 
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{

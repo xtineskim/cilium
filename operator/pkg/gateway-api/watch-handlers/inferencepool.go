@@ -7,7 +7,12 @@ import (
 	"context"
 	"log/slog"
 
+	"github.com/cilium/cilium/operator/pkg/gateway-api/helpers"
 	"github.com/cilium/cilium/pkg/logging/logfields"
+	corev1 "k8s.io/api/core/v1"
+	discoveryv1 "k8s.io/api/discovery/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -25,31 +30,82 @@ func EnqueueRequestForOwningInferencePool(c client.Client, logger *slog.Logger, 
 		if !ok {
 			return nil
 		}
-		httpRouteList := &gatewayv1.HTTPRouteList{}
+		return gatewayRequestForInferencePool(ctx, c, inferencePool,logger,controllerName)
+	})
+}
 
-		if err := c.List(ctx, httpRouteList); err != nil {
-			logger.WarnContext(ctx, "Unable to list httproutes", logfields.Error, err)
+// EnqueueRequestForOwningEndpointSlice returns an event handler that, when passed an
+// EndPointSlice, returns reconcile.Requests for all the 
+// Cilium-relevant Gateways
+func EnqueueRequestForOwningEndpointSlice(c client.Client, logger *slog.Logger, controllerName string) handler.EventHandler{
+	return handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, a client.Object)[]reconcile.Request{
+		// get the endpointslices for a shadow service created from an inferencePool
+		eps, ok := a.(*discoveryv1.EndpointSlice)
+		if !ok{
+			return nil
+		}
+		svcName := eps.Labels[discoveryv1.LabelServiceName]
+		if svcName == ""{
+			return nil
 		}
 
-		httprouteInfExt := make(map[*gatewayv1.HTTPRoute]struct{})
+		svc := &corev1.Service{}
+		if err := c.Get(ctx, types.NamespacedName{
+			Name: svcName,
+			Namespace: eps.Namespace,
+		},svc); err != nil{
+			return nil
+		}
 
-		// for each httproute, check if the rules.backendref is the inferencepool
-		for _, hr := range httpRouteList.Items {
-			for _, backend := range hr.Spec.Rules {
-				if backend.Name == (*gatewayv1.SectionName)(&inferencePool.Name) {
-					// if it is a match, then put the httproute in a list
-					httprouteInfExt[&hr] = struct{}{}
-				} else {
-					continue
+		for _, ref := range svc.OwnerReferences{
+			if ref.Kind == "InferencePool"{
+				infPool := &gateway_inf_ext.InferencePool{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: ref.Name,
+						Namespace: eps.Namespace,
+					},
 				}
+				return gatewayRequestForInferencePool(ctx, c, infPool, logger, controllerName)
 			}
 		}
-		recReq := []reconcile.Request{}
-		// get all the gateways associated with the httproutes
-		for r, _ := range httprouteInfExt {
-			req := getGatewayReconcileRequestsForRoute(context.Background(), c, a, r.Spec.CommonRouteSpec, logger, controllerName)
-			recReq = append(recReq, req...)
-		}
-		return recReq
+		return nil
 	})
+}
+
+// gets the HTTPRoutes and keeps the one that references InferencePools
+// and resolves the matching route's parentRef to the relevant
+// Cilium-gateway
+func gatewayRequestForInferencePool(ctx context.Context, c client.Client, inferencePool *gateway_inf_ext.InferencePool, logger *slog.Logger, controllerName string) []reconcile.Request{
+	httpRouteList := &gatewayv1.HTTPRouteList{}
+	if err := c.List(ctx, httpRouteList); err != nil{
+		logger.WarnContext(ctx,"unabel to list httproutes", logfields.Error,err)
+		return nil
+	}
+
+	var reqs []reconcile.Request
+	for _, hr:= range httpRouteList.Items{
+		for _, rule := range hr.Spec.Rules{
+			for _, ref := range rule.BackendRefs{
+				if backendRefMatchesInferencePool(ref, hr.Namespace, inferencePool){
+					reqs = append(reqs, (getGatewayReconcileRequestsForRoute(ctx,c, inferencePool, hr.Spec.CommonRouteSpec, logger, controllerName))...)
+				}
+			}
+		}	
+	}
+	return reqs
+}
+
+// compare the kind from gateway inference and gateway backendref
+func backendRefMatchesInferencePool(ref gatewayv1.HTTPBackendRef, routeNs string, infPool *gateway_inf_ext.InferencePool)bool{
+	if !helpers.IsInferencePool(ref.BackendObjectReference){
+		return false
+	}
+	if string(ref.Name) != infPool.Name{
+		return false
+	}
+	ns := routeNs	
+	if ref.Namespace != nil{
+		ns = string(*ref.Namespace)
+	}
+	return ns == infPool.Namespace
 }
