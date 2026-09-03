@@ -18,6 +18,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	gateway_inf_ext "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	controllerruntime "github.com/cilium/cilium/operator/pkg/controller-runtime"
@@ -171,11 +172,12 @@ func (r *gatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 	// if there are inferencepools, create the shadow service for them
 	if r.gatewayAPIInferenceExtensionEnabled && len(inputs.InferencePools) > 0 {
-		for _, infPool := range inputs.InferencePools{
+		referencedInferecePools := referencedInferencePools(inputs.AttachedHTTPRoutes(gw), inputs.InferencePools)
+		for _, infPool := range referencedInferecePools {
 			// get the shadow service for that inference pool
-			infPoolSvc := helpers.DesiredShadowService(&infPool)
+			infPoolSvc := helpers.DesiredShadowService(infPool)
 
-			if err := r.ensureService(ctx, infPoolSvc); err != nil{
+			if err := r.ensureService(ctx, infPoolSvc); err != nil {
 				// update the inference pool status
 				return r.handleReconcileErrorWithStatus(ctx, fmt.Errorf("failed to create the inference pool Service resource: %w", err), original, gw)
 			}
@@ -198,7 +200,7 @@ func (r *gatewayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		ReferenceGrants:     inputs.ReferenceGrants,
 		BackendTLSPolicyMap: btlspStatusMap,
 		MergedListeners:     listenerStatusResult.MergedAndValidListeners,
-		InferencePools: 	 inputs.InferencePools,
+		InferencePools:      inputs.InferencePools,
 	})
 
 	// Step 4: Translate the listeners into Cilium model
@@ -517,4 +519,38 @@ func (r *gatewayReconciler) updateStatusAndSuccess(ctx context.Context, original
 	}
 
 	return controllerruntime.Success()
+}
+
+// referencedInferencePools returns the []InferencePools that are referenced in the backendRef of
+// at least one of the HTTPRoutes for the given gateway that is getting reconciled
+func referencedInferencePools(httpRoutes []gatewayv1.HTTPRoute, infPools []gateway_inf_ext.InferencePool) []*gateway_inf_ext.InferencePool {
+	poolsByKey := make(map[types.NamespacedName]*gateway_inf_ext.InferencePool, len(infPools))
+
+	for _, pool := range infPools {
+		poolsByKey[types.NamespacedName{Namespace: pool.Namespace, Name: pool.Name}] = &pool
+	}
+
+	seen := make(map[types.NamespacedName]struct{})
+	var referencedInfPools []*gateway_inf_ext.InferencePool
+	for _, hr := range httpRoutes {
+		for _, rule := range hr.Spec.Rules {
+			for _, br := range rule.BackendRefs {
+				if !helpers.IsInferencePool(br.BackendObjectReference) {
+					continue
+				}
+				key := types.NamespacedName{
+					Namespace: helpers.NamespaceDerefOr(br.Namespace, hr.Namespace),
+					Name:      string(br.Name),
+				}
+				if _, ok := seen[key]; ok {
+					continue
+				}
+				if pool, ok := poolsByKey[key]; ok {
+					seen[key] = struct{}{}
+					referencedInfPools = append(referencedInfPools, pool)
+				}
+			}
+		}
+	}
+	return referencedInfPools
 }

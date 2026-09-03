@@ -12,6 +12,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -19,6 +20,8 @@ import (
 
 	gateway_inf_ext "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
+
+	"github.com/cilium/cilium/operator/pkg/gateway-api/indexers"
 )
 
 // EnqueueRequestForOwningInferencePool returns an event handler that, when passed a InferencePool, returns reconcile.Requests
@@ -77,22 +80,21 @@ func EnqueueRequestForOwningEndpointSlice(c client.Client, logger *slog.Logger, 
 // Cilium-gateway
 func gatewayRequestForInferencePool(ctx context.Context, c client.Client, inferencePool *gateway_inf_ext.InferencePool, logger *slog.Logger, controllerName string) []reconcile.Request{
 	httpRouteList := &gatewayv1.HTTPRouteList{}
-	if err := c.List(ctx, httpRouteList); err != nil{
-		logger.WarnContext(ctx,"unabel to list httproutes", logfields.Error,err)
-		return nil
-	}
+    if err := c.List(ctx, httpRouteList, &client.ListOptions{
+        FieldSelector: fields.OneTermEqualSelector(
+            indexers.InferencePoolHTTPRouteIndex,
+            types.NamespacedName{Namespace: inferencePool.Namespace, Name: inferencePool.Name}.String(),
+        ),
+    }); err != nil {
+        logger.WarnContext(ctx, "unable to list httproutes", logfields.Error, err)
+        return nil
+    }
 
-	var reqs []reconcile.Request
-	for _, hr:= range httpRouteList.Items{
-		for _, rule := range hr.Spec.Rules{
-			for _, ref := range rule.BackendRefs{
-				if backendRefMatchesInferencePool(ref, hr.Namespace, inferencePool){
-					reqs = append(reqs, (getGatewayReconcileRequestsForRoute(ctx,c, inferencePool, hr.Spec.CommonRouteSpec, logger, controllerName))...)
-				}
-			}
-		}	
-	}
-	return reqs
+    var reqs []reconcile.Request
+    for _, hr := range httpRouteList.Items {
+        reqs = append(reqs, getGatewayReconcileRequestsForRoute(ctx, c, inferencePool, hr.Spec.CommonRouteSpec, logger, controllerName)...)
+    }
+    return reqs
 }
 
 // compare the kind from gateway inference and gateway backendref
