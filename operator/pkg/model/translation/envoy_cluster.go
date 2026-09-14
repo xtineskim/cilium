@@ -6,6 +6,7 @@ package translation
 import (
 	"fmt"
 	goslices "slices"
+	"strconv"
 
 	envoy_config_cluster_v3 "github.com/envoyproxy/go-control-plane/envoy/config/cluster/v3"
 	envoy_config_core_v3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
@@ -98,6 +99,17 @@ func (i *cecTranslator) desiredEnvoyCluster(m *model.Model) ([]ciliumv2.XDSResou
 		}
 	}
 
+	for _, be := range getUniqueEPPs(m) {
+		port := strconv.Itoa(int(be.Port))
+		clusterName := getEPPClusterName(be.Namespace, be.Name, port)
+		clusterServiceName := getClusterServiceName(be.Namespace, be.Name, port)
+		if _, exists := envoyClusters[clusterName]; !exists {
+			sortedClusterNames = append(sortedClusterNames, clusterName)
+			envoyClusters[clusterName], _ = i.httpCluster(clusterName, clusterServiceName, true, "", nil)
+		}
+
+	}
+
 	for ns, v := range getNamespaceNamePortsMapForTLS(m) {
 		for name, ports := range v {
 			for _, port := range ports {
@@ -179,6 +191,13 @@ func getClusterName(ns, name, port string) string {
 // so each carries the correct protocol config (explicitHttpConfig/HTTP2 vs useDownstreamProtocolConfig).
 func getGRPCExtAuthClusterName(ns, name, port string) string {
 	return "grpc:" + getClusterName(ns, name, port)
+}
+
+// getEPPClusterName retiurns the cluster name for an InferencePool's EndpointPicker (EPP).
+// The "epp:" prefix keeps it distinct from the regular route clusters and ext_authz clusters for the
+// same service.
+func getEPPClusterName(ns, name, port string) string {
+	return "epp:" + getClusterName(ns, name, port)
 }
 
 // getHTTPExtAuthClusterName returns the cluster name for an HTTP ext_authz backend.
@@ -266,4 +285,27 @@ func getNamespaceNamePortsMapForTLS(m *model.Model) map[string]map[string][]stri
 		}
 	}
 	return namespaceNamePortMap
+}
+
+// getUniqueEPPs returns a deduplicated list of Endpoint Pickers (EPPs) from the routes.
+// the uniqueness is based on "<namespace>/<name>:port"
+func getUniqueEPPs(m *model.Model) []*model.EndpointPicker {
+	seen := map[string]struct{}{}
+	var result []*model.EndpointPicker
+	for _, h := range m.HTTP {
+		for _, r := range h.Routes {
+			for _, be := range r.Backends {
+				if be.EndpointPicker == nil {
+					continue
+				}
+				key := be.EndpointPicker.Namespace + "/" + be.EndpointPicker.Name + ":" + strconv.Itoa(int(be.EndpointPicker.Port))
+				if _, ok := seen[key]; ok {
+					continue
+				}
+				seen[key] = struct{}{}
+				result = append(result, be.EndpointPicker)
+			}
+		}
+	}
+	return result
 }
